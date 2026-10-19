@@ -2,18 +2,21 @@ const ProductRepository = require("../repositories/ProductRepository");
 const OrderRepository = require("../repositories/OrderRepository");
 const NotificationService = require("./NotificationService");
 const Logger = require("../utils/Logger");
+const FreightCalculator = require("../calculators/FreightCalculator");
 
 class OrderService {
-  constructor({
+constructor({
   productRepository = new ProductRepository(),
   orderRepository = new OrderRepository(),
   notificationService = new NotificationService(),
-  logger = new Logger()
+  logger = new Logger(),
+  freightCalculator = new FreightCalculator()
 } = {}) {
   this.productRepository = productRepository;
   this.orderRepository = orderRepository;
   this.notificationService = notificationService;
   this.logger = logger;
+  this.freightCalculator = freightCalculator;
 }
 
   process(order) {
@@ -85,25 +88,11 @@ class OrderService {
       totalWeight += item.product.weight * item.quantity;
     }
 
-    let freight = 0;
-
-    if (order.customer.address.region === "sudeste") {
-      freight = 20 + totalWeight * 4;
-    } else if (order.customer.address.region === "sul") {
-      freight = 28 + totalWeight * 5;
-    } else if (order.customer.address.region === "centro-oeste") {
-      freight = 35 + totalWeight * 6;
-    } else if (order.customer.address.region === "nordeste") {
-      freight = 45 + totalWeight * 7;
-    } else if (order.customer.address.region === "norte") {
-      freight = 60 + totalWeight * 9;
-    } else {
-      freight = 50 + totalWeight * 8;
-    }
-
-    if (order.couponCode === "FRETEGRATIS") {
-      freight = 0;
-    }
+  const freight = this.freightCalculator.calculate(
+  totalWeight,
+  order.customer.address.region,
+  order.couponCode
+  );
 
     let paymentFee = 0;
     let paymentStatus = "pending";

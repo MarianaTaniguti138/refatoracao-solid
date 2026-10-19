@@ -7,16 +7,18 @@ test("deve aceitar dependências externas pelo construtor", () => {
   const orderRepository = {};
   const notificationService = {};
   const logger = {};
-
+  const freightCalculator = {};
   const service = new OrderService({
     productRepository,
     orderRepository,
     notificationService,
-    logger
+    logger,
+    freightCalculator,
   });
 
   assert.equal(service.productRepository, productRepository);
   assert.equal(service.orderRepository, orderRepository);
   assert.equal(service.notificationService, notificationService);
   assert.equal(service.logger, logger);
+  assert.equal(service.freightCalculator, freightCalculator)
 });
