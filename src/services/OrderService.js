@@ -5,19 +5,19 @@ const Logger = require("../utils/Logger");
 const FreightCalculator = require("../calculators/FreightCalculator");
 
 class OrderService {
-constructor({
-  productRepository = new ProductRepository(),
-  orderRepository = new OrderRepository(),
-  notificationService = new NotificationService(),
-  logger = new Logger(),
-  freightCalculator = new FreightCalculator()
-} = {}) {
-  this.productRepository = productRepository;
-  this.orderRepository = orderRepository;
-  this.notificationService = notificationService;
-  this.logger = logger;
-  this.freightCalculator = freightCalculator;
-}
+  constructor({
+    productRepository = new ProductRepository(),
+    orderRepository = new OrderRepository(),
+    notificationService = new NotificationService(),
+    logger = new Logger(),
+    freightCalculator = new FreightCalculator()
+  } = {}) {
+    this.productRepository = productRepository;
+    this.orderRepository = orderRepository;
+    this.notificationService = notificationService;
+    this.logger = logger;
+    this.freightCalculator = freightCalculator;
+  }
 
   process(order) {
     this.logger.info(`Iniciando processamento do pedido ${order.id}.`);
@@ -26,7 +26,10 @@ constructor({
       throw new Error("Cliente obrigatorio.");
     }
 
-    if (!order.customer.email || !order.customer.email.includes("@")) {
+    if (
+      !order.customer.email ||
+      !order.customer.email.includes("@")
+    ) {
       throw new Error("E-mail do cliente invalido.");
     }
 
@@ -88,11 +91,11 @@ constructor({
       totalWeight += item.product.weight * item.quantity;
     }
 
-  const freight = this.freightCalculator.calculate(
-  totalWeight,
-  order.customer.address.region,
-  order.couponCode
-  );
+    const freight = this.freightCalculator.calculate(
+      totalWeight,
+      order.customer.getRegion(),
+      order.couponCode
+    );
 
     let paymentFee = 0;
     let paymentStatus = "pending";
@@ -104,6 +107,7 @@ constructor({
       if (order.installments > 1) {
         paymentFee = subtotal * 0.025;
       }
+
       paymentStatus = "approved";
     } else if (order.paymentMethod === "boleto") {
       paymentStatus = "waiting_payment";
@@ -111,24 +115,30 @@ constructor({
       throw new Error("Forma de pagamento invalida.");
     }
 
-    const total = Number((subtotal - discount + freight + paymentFee).toFixed(2));
+    const total = Number(
+      (subtotal - discount + freight + paymentFee).toFixed(2)
+    );
 
     if (total <= 0) {
       throw new Error("Total do pedido invalido.");
     }
 
     for (const item of order.items) {
-      this.productRepository.updateStock(item.product.id, item.quantity);
+      this.productRepository.updateStock(
+        item.product.id,
+        item.quantity
+      );
     }
 
-    order.status = paymentStatus === "approved" ? "confirmed" : "waiting_payment";
+    order.status =
+      paymentStatus === "approved" ? "confirmed" : "waiting_payment";
 
     const orderSummary = {
       id: order.id,
       customerName: order.customer.name,
       customerEmail: order.customer.email,
-      city: order.customer.address.city,
-      state: order.customer.address.state,
+      city: order.customer.getCity(),
+      state: order.customer.getState(),
       items: order.items.map((item) => ({
         productId: item.product.id,
         name: item.product.name,
@@ -148,14 +158,22 @@ constructor({
     this.orderRepository.save(orderSummary);
 
     if (order.status === "confirmed") {
-      this.notificationService.sendOrderConfirmation(order.customer, order.id, total);
+      this.notificationService.sendOrderConfirmation(
+        order.customer,
+        order.id,
+        total
+      );
     } else {
-      this.logger.warn(`Pedido ${order.id} aguardando pagamento.`);
+      this.logger.warn(
+        `Pedido ${order.id} aguardando pagamento.`
+      );
     }
 
     console.log("Resumo do pedido");
     console.log(`Cliente: ${order.customer.name}`);
-    console.log(`Cidade: ${order.customer.address.city}/${order.customer.address.state}`);
+    console.log(
+      `Cidade: ${order.customer.getCity()}/${order.customer.getState()}`
+    );
     console.log(`Itens: ${order.getTotalItems()}`);
     console.log(`Subtotal: R$ ${subtotal.toFixed(2)}`);
     console.log(`Desconto: R$ ${discount.toFixed(2)}`);
