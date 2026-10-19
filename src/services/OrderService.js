@@ -4,12 +4,17 @@ const NotificationService = require("./NotificationService");
 const Logger = require("../utils/Logger");
 
 class OrderService {
-  constructor() {
-    this.productRepository = new ProductRepository();
-    this.orderRepository = new OrderRepository();
-    this.notificationService = new NotificationService();
-    this.logger = new Logger();
-  }
+  constructor({
+  productRepository = new ProductRepository(),
+  orderRepository = new OrderRepository(),
+  notificationService = new NotificationService(),
+  logger = new Logger()
+} = {}) {
+  this.productRepository = productRepository;
+  this.orderRepository = orderRepository;
+  this.notificationService = notificationService;
+  this.logger = logger;
+}
 
   process(order) {
     this.logger.info(`Iniciando processamento do pedido ${order.id}.`);
