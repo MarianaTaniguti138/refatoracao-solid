@@ -1,6 +1,7 @@
 const ProductRepository = require("../repositories/ProductRepository");
 const OrderRepository = require("../repositories/OrderRepository");
 const NotificationService = require("./NotificationService");
+const OrderSummaryPrinter = require("./OrderSummaryPrinter");
 const Logger = require("../utils/Logger");
 const FreightCalculator = require("../calculators/FreightCalculator");
 
@@ -9,12 +10,14 @@ class OrderService {
     productRepository = new ProductRepository(),
     orderRepository = new OrderRepository(),
     notificationService = new NotificationService(),
+    orderSummaryPrinter = new OrderSummaryPrinter(),
     logger = new Logger(),
     freightCalculator = new FreightCalculator()
   } = {}) {
     this.productRepository = productRepository;
     this.orderRepository = orderRepository;
     this.notificationService = notificationService;
+    this.orderSummaryPrinter = orderSummaryPrinter;
     this.logger = logger;
     this.freightCalculator = freightCalculator;
   }
@@ -24,7 +27,7 @@ class OrderService {
       `Iniciando processamento do pedido ${order.id}.`
     );
 
-    // Valida os dados do cliente e do pedido.
+    // Valida os dados do cliente.
     if (!order.customer) {
       throw new Error("Cliente obrigatorio.");
     }
@@ -36,11 +39,11 @@ class OrderService {
       throw new Error("E-mail do cliente invalido.");
     }
 
+    // Valida os itens do pedido.
     if (!order.items || order.items.length === 0) {
       throw new Error("Pedido sem itens.");
     }
 
-    // Confere os produtos e a disponibilidade em estoque.
     for (const item of order.items) {
       if (!item.product) {
         throw new Error("Item sem produto.");
@@ -67,14 +70,14 @@ class OrderService {
       }
     }
 
-    // Calcula o subtotal dos itens.
+    // Calcula o subtotal.
     let subtotal = 0;
 
     for (const item of order.items) {
       subtotal += item.product.price * item.quantity;
     }
 
-    // Calcula os descontos aplicáveis.
+    // Calcula os descontos.
     let discount = 0;
 
     if (order.customer.type === "vip") {
@@ -93,7 +96,7 @@ class OrderService {
       discount += 250;
     }
 
-    // Calcula o peso total para o cálculo do frete.
+    // Calcula o peso total dos itens.
     let totalWeight = 0;
 
     for (const item of order.items) {
@@ -101,14 +104,14 @@ class OrderService {
         item.product.weight * item.quantity;
     }
 
-    // Delegação do cálculo do frete a uma classe específica.
+    // Calcula o frete em uma classe separada.
     const freight = this.freightCalculator.calculate(
       totalWeight,
       order.customer.getRegion(),
       order.couponCode
     );
 
-    // Define a situação do pagamento e as taxas.
+    // Processa a forma de pagamento.
     let paymentFee = 0;
     let paymentStatus = "pending";
 
@@ -127,7 +130,7 @@ class OrderService {
       throw new Error("Forma de pagamento invalida.");
     }
 
-    // Calcula e valida o valor final.
+    // Calcula o total final.
     const total = Number(
       (subtotal - discount + freight + paymentFee).toFixed(2)
     );
@@ -144,6 +147,7 @@ class OrderService {
       );
     }
 
+    // Define o status do pedido.
     order.status =
       paymentStatus === "approved"
         ? "confirmed"
@@ -172,10 +176,10 @@ class OrderService {
       createdAt: order.createdAt
     };
 
-    // Persiste o pedido.
+    // Salva o pedido.
     this.orderRepository.save(orderSummary);
 
-    // Envia a confirmação ou registra que o pagamento está pendente.
+    // Notifica o cliente ou registra que o pagamento está pendente.
     if (order.status === "confirmed") {
       this.notificationService.sendOrderConfirmation(
         order.customer,
@@ -188,18 +192,8 @@ class OrderService {
       );
     }
 
-    // Exibe o resumo do pedido.
-    console.log("Resumo do pedido");
-    console.log(`Cliente: ${order.customer.name}`);
-    console.log(
-      `Cidade: ${order.customer.getCity()}/${order.customer.getState()}`
-    );
-    console.log(`Itens: ${order.getTotalItems()}`);
-    console.log(`Subtotal: R$ ${subtotal.toFixed(2)}`);
-    console.log(`Desconto: R$ ${discount.toFixed(2)}`);
-    console.log(`Frete: R$ ${freight.toFixed(2)}`);
-    console.log(`Taxas: R$ ${paymentFee.toFixed(2)}`);
-    console.log(`Total: R$ ${total.toFixed(2)}`);
+    // Delega a impressão do resumo para outra classe.
+    this.orderSummaryPrinter.print(order, orderSummary);
 
     return orderSummary;
   }
