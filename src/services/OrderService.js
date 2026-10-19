@@ -20,8 +20,11 @@ class OrderService {
   }
 
   process(order) {
-    this.logger.info(`Iniciando processamento do pedido ${order.id}.`);
+    this.logger.info(
+      `Iniciando processamento do pedido ${order.id}.`
+    );
 
+    // Valida os dados do cliente e do pedido.
     if (!order.customer) {
       throw new Error("Cliente obrigatorio.");
     }
@@ -37,6 +40,7 @@ class OrderService {
       throw new Error("Pedido sem itens.");
     }
 
+    // Confere os produtos e a disponibilidade em estoque.
     for (const item of order.items) {
       if (!item.product) {
         throw new Error("Item sem produto.");
@@ -46,23 +50,31 @@ class OrderService {
         throw new Error("Quantidade invalida.");
       }
 
-      const product = this.productRepository.findById(item.product.id);
+      const product = this.productRepository.findById(
+        item.product.id
+      );
 
       if (!product) {
-        throw new Error(`Produto ${item.product.id} nao encontrado.`);
+        throw new Error(
+          `Produto ${item.product.id} nao encontrado.`
+        );
       }
 
       if (product.stock < item.quantity) {
-        throw new Error(`Estoque insuficiente para ${product.name}.`);
+        throw new Error(
+          `Estoque insuficiente para ${product.name}.`
+        );
       }
     }
 
+    // Calcula o subtotal dos itens.
     let subtotal = 0;
 
     for (const item of order.items) {
       subtotal += item.product.price * item.quantity;
     }
 
+    // Calcula os descontos aplicáveis.
     let discount = 0;
 
     if (order.customer.type === "vip") {
@@ -77,26 +89,26 @@ class OrderService {
       discount += subtotal * 0.1;
     }
 
-    if (order.couponCode === "FRETEGRATIS") {
-      discount += 0;
-    }
-
     if (subtotal > 8000) {
       discount += 250;
     }
 
+    // Calcula o peso total para o cálculo do frete.
     let totalWeight = 0;
 
     for (const item of order.items) {
-      totalWeight += item.product.weight * item.quantity;
+      totalWeight +=
+        item.product.weight * item.quantity;
     }
 
+    // Delegação do cálculo do frete a uma classe específica.
     const freight = this.freightCalculator.calculate(
       totalWeight,
       order.customer.getRegion(),
       order.couponCode
     );
 
+    // Define a situação do pagamento e as taxas.
     let paymentFee = 0;
     let paymentStatus = "pending";
 
@@ -115,6 +127,7 @@ class OrderService {
       throw new Error("Forma de pagamento invalida.");
     }
 
+    // Calcula e valida o valor final.
     const total = Number(
       (subtotal - discount + freight + paymentFee).toFixed(2)
     );
@@ -123,6 +136,7 @@ class OrderService {
       throw new Error("Total do pedido invalido.");
     }
 
+    // Atualiza o estoque dos produtos.
     for (const item of order.items) {
       this.productRepository.updateStock(
         item.product.id,
@@ -131,8 +145,11 @@ class OrderService {
     }
 
     order.status =
-      paymentStatus === "approved" ? "confirmed" : "waiting_payment";
+      paymentStatus === "approved"
+        ? "confirmed"
+        : "waiting_payment";
 
+    // Monta o resumo que será salvo no repositório.
     const orderSummary = {
       id: order.id,
       customerName: order.customer.name,
@@ -155,8 +172,10 @@ class OrderService {
       createdAt: order.createdAt
     };
 
+    // Persiste o pedido.
     this.orderRepository.save(orderSummary);
 
+    // Envia a confirmação ou registra que o pagamento está pendente.
     if (order.status === "confirmed") {
       this.notificationService.sendOrderConfirmation(
         order.customer,
@@ -169,6 +188,7 @@ class OrderService {
       );
     }
 
+    // Exibe o resumo do pedido.
     console.log("Resumo do pedido");
     console.log(`Cliente: ${order.customer.name}`);
     console.log(
