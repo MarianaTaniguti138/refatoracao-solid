@@ -19,3 +19,10 @@ test("deve calcular o frete padrão para uma região desconhecida", () => {
 
   assert.equal(calculator.calculate(10, "outra-regiao"), 130);
 });
+test("deve aceitar regras de frete personalizadas", () => {
+  const calculator = new FreightCalculator({
+    personalizado: { base: 10, rate: 2 },
+  });
+
+  assert.equal(calculator.calculate(5, "personalizado"), 20);
+});
