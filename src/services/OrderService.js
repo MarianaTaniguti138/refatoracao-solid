@@ -5,6 +5,10 @@ const OrderSummaryPrinter = require("./OrderSummaryPrinter");
 const Logger = require("../utils/Logger");
 const FreightCalculator = require("../calculators/FreightCalculator");
 
+const PixPayment = require("../payments/PixPayment");
+const CreditCardPayment = require("../payments/CreditCardPayment");
+const BoletoPayment = require("../payments/BoletoPayment");
+
 class OrderService {
   constructor({
     productRepository = new ProductRepository(),
@@ -12,7 +16,12 @@ class OrderService {
     notificationService = new NotificationService(),
     orderSummaryPrinter = new OrderSummaryPrinter(),
     logger = new Logger(),
-    freightCalculator = new FreightCalculator()
+    freightCalculator = new FreightCalculator(),
+    paymentMethods = {
+      pix: new PixPayment(),
+      credit_card: new CreditCardPayment(),
+      boleto: new BoletoPayment()
+    }
   } = {}) {
     this.productRepository = productRepository;
     this.orderRepository = orderRepository;
@@ -20,6 +29,7 @@ class OrderService {
     this.orderSummaryPrinter = orderSummaryPrinter;
     this.logger = logger;
     this.freightCalculator = freightCalculator;
+    this.paymentMethods = paymentMethods;
   }
 
   process(order) {
@@ -77,7 +87,7 @@ class OrderService {
       subtotal += item.product.price * item.quantity;
     }
 
-    // Calcula os descontos.
+    // Calcula os descontos do cliente e do cupom.
     let discount = 0;
 
     if (order.customer.type === "vip") {
@@ -100,35 +110,36 @@ class OrderService {
     let totalWeight = 0;
 
     for (const item of order.items) {
-      totalWeight +=
-        item.product.weight * item.quantity;
+      totalWeight += item.product.weight * item.quantity;
     }
 
-    // Calcula o frete em uma classe separada.
+    // Calcula o frete.
     const freight = this.freightCalculator.calculate(
       totalWeight,
       order.customer.getRegion(),
       order.couponCode
     );
 
-    // Processa a forma de pagamento.
-    let paymentFee = 0;
-    let paymentStatus = "pending";
+    // Processa o pagamento pela estratégia correspondente.
+    const paymentMethod = this.paymentMethods[order.paymentMethod];
 
-    if (order.paymentMethod === "pix") {
-      paymentStatus = "approved";
-      discount += subtotal * 0.03;
-    } else if (order.paymentMethod === "credit_card") {
-      if (order.installments > 1) {
-        paymentFee = subtotal * 0.025;
-      }
-
-      paymentStatus = "approved";
-    } else if (order.paymentMethod === "boleto") {
-      paymentStatus = "waiting_payment";
-    } else {
+    if (
+      !paymentMethod ||
+      typeof paymentMethod.process !== "function"
+    ) {
       throw new Error("Forma de pagamento invalida.");
     }
+
+    const paymentResult = paymentMethod.process(
+      subtotal,
+      order.installments
+    );
+
+    const paymentFee = paymentResult.paymentFee;
+    const paymentStatus = paymentResult.paymentStatus;
+
+    // Soma o desconto específico do pagamento, como o desconto PIX.
+    discount += paymentResult.discount;
 
     // Calcula o total final.
     const total = Number(
@@ -153,7 +164,7 @@ class OrderService {
         ? "confirmed"
         : "waiting_payment";
 
-    // Monta o resumo que será salvo no repositório.
+    // Monta o resumo do pedido.
     const orderSummary = {
       id: order.id,
       customerName: order.customer.name,
@@ -179,7 +190,7 @@ class OrderService {
     // Salva o pedido.
     this.orderRepository.save(orderSummary);
 
-    // Notifica o cliente ou registra que o pagamento está pendente.
+    // Notifica o cliente ou registra pagamento pendente.
     if (order.status === "confirmed") {
       this.notificationService.sendOrderConfirmation(
         order.customer,
@@ -192,7 +203,7 @@ class OrderService {
       );
     }
 
-    // Delega a impressão do resumo para outra classe.
+    // Delega a impressão do resumo.
     this.orderSummaryPrinter.print(order, orderSummary);
 
     return orderSummary;
