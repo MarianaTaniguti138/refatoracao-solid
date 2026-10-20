@@ -1,4 +1,6 @@
-class CreditCardPayment {
+const PaymentMethod = require("./contracts/PaymentMethod");
+
+class CreditCardPayment extends PaymentMethod {
   process(subtotal, installments = 1) {
     return {
       paymentFee: installments > 1 ? subtotal * 0.025 : 0,

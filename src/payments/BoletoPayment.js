@@ -1,4 +1,6 @@
-class BoletoPayment {
+const PaymentMethod = require("./contracts/PaymentMethod");
+
+class BoletoPayment extends PaymentMethod {
   process() {
     return {
       paymentFee: 0,
@@ -9,3 +11,4 @@ class BoletoPayment {
 }
 
 module.exports = BoletoPayment;
+
